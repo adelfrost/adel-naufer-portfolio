@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ink: #0a0908;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Dark site — makes CSS light-dark() (used by GlassSurface) pick the dark
+     variant, i.e. the bright glass highlights instead of the black ones. */
+  color-scheme: dark;
+}
+
+body {
+  font-family: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+  background: var(--ink);
+  color: #fff;
+  /* `clip` contains horizontal overflow WITHOUT turning <body> into a scroll
+     container (which `hidden` would, breaking window scroll & position:sticky). */
+  overflow-x: clip;
+}
+
+/* Logo marquee — track holds TWO identical copies; shifting it -50% lands
+   the 2nd copy exactly where the 1st was, so the scroll is seamless. */
+@keyframes marquee-x {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-50%, 0, 0); }
+}
+.marquee-track {
+  animation: marquee-x var(--marquee-duration, 42s) linear infinite;
+  animation-direction: var(--marquee-direction, normal);
+  will-change: transform;
+}
+.marquee-group:hover .marquee-track {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track { animation: none; }
+}
+
+/* Frosted glass surfaces */
+.glass {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(14px) saturate(125%);
+  -webkit-backdrop-filter: blur(14px) saturate(125%);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+.glass-warm {
+  background: rgba(28, 22, 16, 0.42);
+  backdrop-filter: blur(16px) saturate(130%);
+  -webkit-backdrop-filter: blur(16px) saturate(130%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}

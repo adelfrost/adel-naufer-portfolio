@@ -1,0 +1,44 @@
+/* GlowingEffect — a gradient border ring whose bright arc orbits toward the
+   cursor when it's nearby. Pure CSS ring (mask-composite) + a JS-driven
+   --start angle and --active opacity. */
+.glow-effect {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.glow-effect::after {
+  content: '';
+  position: absolute;
+  inset: calc(-1 * var(--border-width, 1px));
+  border-radius: inherit;
+  padding: var(--border-width, 1px);
+  background: conic-gradient(
+    from calc(var(--start, 0) * 1deg),
+    transparent 0deg,
+    #dd7bbb calc(var(--spread, 20) * 0.25deg),
+    #d79f1e calc(var(--spread, 20) * 0.55deg),
+    #5a922c calc(var(--spread, 20) * 0.85deg),
+    #4c7894 calc(var(--spread, 20) * 1.15deg),
+    transparent calc(var(--spread, 20) * 1.7deg)
+  );
+  opacity: var(--active, 0);
+  transition: opacity 0.45s ease;
+  filter: blur(var(--blur, 0px));
+  /* keep the gradient only in the border ring */
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+/* a faint always-on hairline so the card edge reads even when inactive */
+.glow-effect--glow::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+}

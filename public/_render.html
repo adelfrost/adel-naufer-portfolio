@@ -1,0 +1,76 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>html,body{margin:0;background:transparent;overflow:hidden}canvas{display:block}</style>
+</head>
+<body>
+  <script type="module">
+    import * as THREE from 'https://esm.sh/three@0.169.0';
+    import { GLTFLoader } from 'https://esm.sh/three@0.169.0/examples/jsm/loaders/GLTFLoader.js';
+    import { DRACOLoader } from 'https://esm.sh/three@0.169.0/examples/jsm/loaders/DRACOLoader.js';
+    import { RoomEnvironment } from 'https://esm.sh/three@0.169.0/examples/jsm/environments/RoomEnvironment.js';
+
+    const p = new URLSearchParams(location.search);
+    const model = p.get('model') || 'delorean';
+    const W = +(p.get('w') || 1000);
+    const H = +(p.get('h') || 600);
+    const ry = (+(p.get('ry') || 35)) * Math.PI / 180;
+    const rx = (+(p.get('rx') || 6)) * Math.PI / 180;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+    renderer.setSize(W, H);
+    renderer.setPixelRatio(2);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
+    document.body.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    const bg = p.get('bg');
+    if (bg) scene.background = new THREE.Color('#' + bg);
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+    const cam = new THREE.PerspectiveCamera(32, W / H, 0.1, 100);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x555555, 1.0));
+    const d1 = new THREE.DirectionalLight(0xfff0d8, 2.6); d1.position.set(-5, 7, 6); scene.add(d1);
+    const d2 = new THREE.DirectionalLight(0xffd9a8, 1.0); d2.position.set(6, 2, -3); scene.add(d2);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+
+    const draco = new DRACOLoader();
+    draco.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+    const loader = new GLTFLoader();
+    loader.setDRACOLoader(draco);
+
+    const suffix = p.get('suffix') || '';
+    const finish = () => {
+      renderer.render(scene, cam);
+      renderer.domElement.toBlob((blob) => {
+        fetch('/_save?name=' + model + suffix, { method: 'POST', body: blob })
+          .then(() => { window.__saved = true; })
+          .catch((e) => { window.__error = 'save:' + e; window.__saved = true; });
+      }, 'image/png');
+      window.__ready = true;
+    };
+
+    loader.load('/models/' + model + '.glb', (g) => {
+      const obj = g.scene;
+      const box = new THREE.Box3().setFromObject(obj);
+      const size = new THREE.Vector3(); box.getSize(size);
+      const center = new THREE.Vector3(); box.getCenter(center);
+      obj.position.sub(center);
+      const wrap = new THREE.Group(); wrap.add(obj); scene.add(wrap);
+      wrap.rotation.set(rx, ry, 0);
+      const maxDim = Math.max(size.x, size.y, size.z);
+      const dist = (maxDim / (2 * Math.tan((32 * Math.PI / 180) / 2))) * 1.15;
+      cam.position.set(0, 0, dist);
+      cam.lookAt(0, 0, 0);
+      finish();
+      // a couple of safety re-renders for late texture decode
+      setTimeout(finish, 250);
+      setTimeout(finish, 700);
+    }, undefined, (e) => { window.__error = String(e && e.message || e); window.__ready = true; });
+  </script>
+</body>
+</html>

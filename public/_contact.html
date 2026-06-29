@@ -1,0 +1,67 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8" /><style>html,body{margin:0;background:#ddd}canvas{display:block}</style></head>
+<body>
+  <script type="module">
+    import * as THREE from 'https://esm.sh/three@0.169.0';
+    import { GLTFLoader } from 'https://esm.sh/three@0.169.0/examples/jsm/loaders/GLTFLoader.js';
+    import { DRACOLoader } from 'https://esm.sh/three@0.169.0/examples/jsm/loaders/DRACOLoader.js';
+    import { RoomEnvironment } from 'https://esm.sh/three@0.169.0/examples/jsm/environments/RoomEnvironment.js';
+
+    const p = new URLSearchParams(location.search);
+    const model = p.get('model') || 'delorean';
+    const rx = (+(p.get('rx') || -10)) * Math.PI / 180;
+    const COLS = 4, ROWS = 2, N = 8, TW = 360, TH = 240;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    renderer.setSize(TW * COLS, TH * ROWS);
+    renderer.setPixelRatio(1);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.autoClear = false;
+    renderer.setScissorTest(true);
+    document.body.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xdddddd);
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    const cam = new THREE.PerspectiveCamera(32, TW / TH, 0.1, 100);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x555555, 1.0));
+    const d1 = new THREE.DirectionalLight(0xfff0d8, 2.6); d1.position.set(-5, 7, 6); scene.add(d1);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+
+    const draco = new DRACOLoader();
+    draco.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+    const loader = new GLTFLoader(); loader.setDRACOLoader(draco);
+
+    const draw = (wrap, size) => {
+      renderer.clear();
+      const maxDim = Math.max(size.x, size.y, size.z);
+      const dist = (maxDim / (2 * Math.tan((32 * Math.PI / 180) / 2))) * 1.2;
+      cam.position.set(0, 0, dist); cam.lookAt(0, 0, 0);
+      for (let i = 0; i < N; i++) {
+        wrap.rotation.set(rx, (i * 360 / N) * Math.PI / 180, 0);
+        const col = i % COLS, row = Math.floor(i / COLS);
+        const x = col * TW, y = (ROWS - 1 - row) * TH;
+        renderer.setViewport(x, y, TW, TH);
+        renderer.setScissor(x, y, TW, TH);
+        renderer.render(scene, cam);
+      }
+      renderer.domElement.toBlob((b) => fetch('/_save?name=' + model + '_contact', { method: 'POST', body: b }).then(() => { window.__saved = true; }), 'image/png');
+      window.__ready = true;
+    };
+
+    loader.load('/models/' + model + '.glb', (g) => {
+      const obj = g.scene;
+      const box = new THREE.Box3().setFromObject(obj);
+      const size = new THREE.Vector3(); box.getSize(size);
+      const center = new THREE.Vector3(); box.getCenter(center);
+      obj.position.sub(center);
+      const wrap = new THREE.Group(); wrap.add(obj); scene.add(wrap);
+      draw(wrap, size);
+      setTimeout(() => draw(wrap, size), 500);
+    }, undefined, (e) => { window.__error = String(e); window.__ready = true; });
+  </script>
+</body>
+</html>

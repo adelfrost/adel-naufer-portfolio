@@ -1,0 +1,25 @@
+# Allowlist strategy: this project folder also holds large design source files
+# (originals, PSDs, raw videos, the Projects/ source tree, node_modules).
+# Ignore everything at the root, then re-include only what is needed to build.
+/*
+
+!/.gitignore
+!/README.md
+!/vercel.json
+!/index.html
+!/package.json
+!/package-lock.json
+!/vite.config.js
+!/tailwind.config.js
+!/postcss.config.js
+!/src
+!/public
+
+# Noise that might live inside the included trees
+**/node_modules/
+**/.DS_Store
+**/Thumbs.db
+**/*.log
+.env
+.env.*
+.vercel
