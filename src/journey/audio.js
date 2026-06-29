@@ -6,9 +6,9 @@
 // only rain and engine sit under the piano.
 
 const AMBIENT = {
-  car: '/audio/car.wav',
-  city: '/audio/city.wav',
-  rain: '/audio/rain.wav',
+  car: '/audio/car.mp3',
+  city: '/audio/city.mp3',
+  rain: '/audio/rain.mp3',
 };
 
 export const RADIO_TRACKS = [
@@ -16,7 +16,7 @@ export const RADIO_TRACKS = [
   { id: 'rock', name: 'Rock Station', src: '/audio/radio/rock.mp3' },
   { id: 'punk', name: 'Punk', src: '/audio/radio/punk.mp3' },
   { id: 'hiphop95', name: "'95 Hip Hop", src: '/audio/radio/hiphop95.mp3' },
-  { id: 'satie', name: 'Satie, Gymnopedies', src: '/audio/radio/satie.wav' },
+  { id: 'satie', name: 'Satie, Gymnopedies', src: '/audio/radio/satie.mp3' },
 ];
 
 const DEFAULT_MIX = { music: 0.8, car: 1, city: 0.7, rain: 0.85 };

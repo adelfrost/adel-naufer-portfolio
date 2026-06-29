@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Menu, X, ArrowUpRight } from 'lucide-react';
 import { NAV_LINKS } from '../data/content';
 import GlassSurface from './GlassSurface';
+import JourneyButton from './JourneyButton';
 
 const ease = [0.16, 1, 0.3, 1];
 const PILL_H = 44;
@@ -238,15 +239,7 @@ export default function Navbar() {
                 variants={fadeScale} transition={fadeScaleT}
                 className="absolute right-0 hidden md:block"
               >
-                <GlassSurface {...GLASS} className="gs-fit" width="auto" height={PILL_H}>
-                  <a
-                    href="#journey"
-                    className="flex h-full items-center gap-2 px-5 text-sm font-medium text-white"
-                  >
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                    My Journey
-                  </a>
-                </GlassSurface>
+                <JourneyButton />
               </motion.div>
             )}
           </AnimatePresence>

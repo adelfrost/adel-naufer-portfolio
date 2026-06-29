@@ -1,8 +1,13 @@
 import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Text } from '@react-three/drei';
+import { preloadFont } from 'troika-three-text';
 import { PROJECT_TEXTS } from './journeyItems';
 import { JOURNEY_LENGTH } from './journeyData';
+
+// Tall condensed display face (the Codrops "Humane"-style WebGL text look).
+const FONT = '/fonts/BebasNeue-Regular.ttf';
+preloadFont({ font: FONT, characters: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ·-&' }, () => {});
 
 const LEN = JOURNEY_LENGTH;
 const SPACING = 3.4;
@@ -14,8 +19,8 @@ const wrapDelta = (at, off) => {
 };
 
 /**
- * ProjectTexts — personal projects float by as 3D text, revealed by the
- * distance travelled. (Logos/skills collectibles removed.)
+ * ProjectTexts — personal projects float by as crisp 3D display text (troika),
+ * revealed by the distance travelled.
  */
 export default function ProjectTexts({ sim, tuning }) {
   const refs = useRef([]);
@@ -38,12 +43,15 @@ export default function ProjectTexts({ sim, tuning }) {
     <Text
       key={i}
       ref={(el) => (refs.current[i] = el)}
-      fontSize={1.15}
-      color="#ffe6f6"
+      font={FONT}
+      fontSize={1.85}
+      letterSpacing={0.04}
+      color="#f4f7ff"
       anchorX="center"
       anchorY="middle"
-      outlineWidth={0.05}
-      outlineColor="#3a1030"
+      outlineWidth={0.012}
+      outlineColor="#0a0a1f"
+      outlineBlur={0.1}
       material-transparent
       material-toneMapped={false}
     >
