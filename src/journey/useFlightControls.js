@@ -18,7 +18,9 @@ export function useJourneyControls(onFirstInput) {
       if (onFirstInput) onFirstInput();
     };
 
-    const onPointerDown = () => { c.current.risePointer = true; first(); };
+    // Hold-to-rise is a desktop mouse affordance only. On touch we drive with
+    // the on-screen buttons, so a tap must not also lift the car.
+    const onPointerDown = (e) => { if (!e || e.pointerType === 'mouse') c.current.risePointer = true; first(); };
     const onPointerUp = () => { c.current.risePointer = false; };
 
     const map = (code, down) => {

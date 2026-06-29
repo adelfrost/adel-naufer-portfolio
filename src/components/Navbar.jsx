@@ -244,8 +244,31 @@ export default function Navbar() {
             )}
           </AnimatePresence>
 
-          {/* ── Mobile hamburger ── */}
-          <div className="absolute right-0 md:hidden">
+          {/* ── Mobile: AN mark (left) ── */}
+          <div className="absolute left-0 md:hidden">
+            <GlassSurface {...GLASS} className="gs-fit" width="auto" height={PILL_H}>
+              <button
+                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                aria-label="Adel Naufer, back to top"
+                className="flex h-full items-center px-4 font-display text-base font-extrabold tracking-tight text-white"
+              >
+                AN<span className="text-white/40">.</span>
+              </button>
+            </GlassSurface>
+          </div>
+
+          {/* ── Mobile: My Journey + hamburger (right) ── */}
+          <div className="absolute right-0 flex items-center gap-2 md:hidden">
+            <GlassSurface {...GLASS} className="gs-fit" width="auto" height={PILL_H}>
+              <a
+                href="#journey"
+                aria-label="My Journey"
+                className="flex h-full items-center gap-2 pl-3 pr-3.5 text-sm font-medium text-white"
+              >
+                <img src="/img/delorean-button.png" alt="" draggable={false} className="h-5 w-auto select-none" />
+                Journey
+              </a>
+            </GlassSurface>
             <GlassSurface {...GLASS} width={PILL_H} height={PILL_H}>
               <button
                 onClick={() => setOpen(true)}

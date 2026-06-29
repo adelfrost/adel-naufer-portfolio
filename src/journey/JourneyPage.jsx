@@ -3,7 +3,7 @@ import { Canvas } from '@react-three/fiber';
 import { useProgress } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette, ChromaticAberration } from '@react-three/postprocessing';
 import { motion, AnimatePresence, useMotionValue, useMotionTemplate, useReducedMotion } from 'motion/react';
-import { Volume2, VolumeX, Radio as RadioIcon, Home as HomeIcon } from 'lucide-react';
+import { Volume2, VolumeX, Radio as RadioIcon, Home as HomeIcon, ChevronUp, ChevronDown, ChevronsUp } from 'lucide-react';
 import JourneyScene from './JourneyScene';
 import Hyperspeed from './Hyperspeed';
 import TuningPanel from './TuningPanel';
@@ -189,6 +189,7 @@ function JourneyNav({ currentMsIdx }) {
       className="pointer-events-auto fixed right-0 top-1/2 z-[205] -translate-y-1/2"
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
+      onClick={() => setOpen((o) => !o)}
     >
       <motion.div
         className="relative flex overflow-hidden rounded-l-2xl border border-r-0 border-white/10 bg-black/55 backdrop-blur-2xl"
@@ -353,6 +354,12 @@ export default function JourneyPage({ onExit }) {
     if (audioRef.current) audioRef.current.start();
   }, []);
 
+  // on-screen touch buttons (mobile) drive the same control ref as the keys
+  const touch = useCallback((key, down) => {
+    if (controls.current) controls.current[key] = down;
+    if (down) setShowHint(false);
+  }, [controls]);
+
   useEffect(() => {
     if (started || !assetsReady) return undefined;
     const onKey = (e) => { if (e.code === 'Space' || e.code === 'Enter') begin(); };
@@ -442,29 +449,30 @@ export default function JourneyPage({ onExit }) {
       {false && <TuningPanel tuning={tuning} />}
 
       {/* ── HUD top bar ── */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between px-6 py-5 sm:px-10">
+      <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between px-4 py-5 sm:px-10">
         <div className="flex flex-col gap-2">
           <span className="font-display text-xs font-semibold uppercase tracking-[0.34em] text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]">
             My Journey
           </span>
-          {/* persistent controls guide */}
-          <div className="hidden flex-wrap items-center gap-x-3 gap-y-1.5 sm:flex">
+          {/* desktop keyboard guide (mobile uses on-screen controls) */}
+          <div className="hidden flex-wrap items-center gap-x-3 gap-y-1.5 md:flex">
             <GuideKey k="W / S" label="Drive" />
             <GuideKey k="Space" label="Rise" />
             <GuideKey k="R" label="Radio" />
             <GuideKey k="M" label="Mute" />
           </div>
         </div>
-        <span className="mt-1 rounded-full bg-black/25 px-3 py-1 font-display text-[10px] font-semibold uppercase tracking-[0.3em] text-amber-200/85 backdrop-blur-sm">
+        <span className="mt-1 hidden rounded-full bg-black/25 px-3 py-1 font-display text-[10px] font-semibold uppercase tracking-[0.3em] text-amber-200/85 backdrop-blur-sm md:inline-block">
           Work in Progress
         </span>
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
           <button
             onClick={requestExit}
             title="Back to home"
-            className="pointer-events-auto inline-flex h-11 items-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-4 font-sans text-sm font-medium text-white backdrop-blur-xl transition hover:bg-white/12"
+            aria-label="Back to home"
+            className="pointer-events-auto inline-flex h-11 items-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-3.5 font-sans text-sm font-medium text-white backdrop-blur-xl transition hover:bg-white/12 md:px-4"
           >
-            <HomeIcon className="h-4 w-4" /> Home
+            <HomeIcon className="h-4 w-4" /> <span className="hidden md:inline">Home</span>
           </button>
           <JourneyANButton onExit={requestExit} />
         </div>
@@ -473,9 +481,9 @@ export default function JourneyPage({ onExit }) {
       {/* ── Right-side journey log ── */}
       <JourneyNav currentMsIdx={ms ? ms.idx : -1} />
 
-      {/* ── Radio (bottom-right) ── */}
+      {/* ── Radio (top-center on mobile, bottom-right on desktop) ── */}
       {started && (
-        <div className="pointer-events-auto absolute bottom-6 right-5 z-[205] flex items-center gap-1 rounded-full border border-white/12 bg-black/45 px-1.5 py-1.5 backdrop-blur-xl sm:right-7">
+        <div className="pointer-events-auto absolute left-1/2 top-[70px] z-[205] flex -translate-x-1/2 items-center gap-1 rounded-full border border-white/12 bg-black/45 px-1.5 py-1.5 backdrop-blur-xl md:left-auto md:right-7 md:top-auto md:bottom-6 md:translate-x-0">
           <button
             onClick={() => audioRef.current && audioRef.current.nextRadio(1)}
             title="Next station (R or scroll)"
@@ -497,6 +505,53 @@ export default function JourneyPage({ onExit }) {
           >
             {radio.musicMuted ? <VolumeX className="h-4 w-4 text-white/45" /> : <Volume2 className="h-4 w-4 text-white/80" />}
           </button>
+        </div>
+      )}
+
+      {/* ── Mobile touch controls (small screens only) ── */}
+      {started && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[206] flex items-end justify-center gap-5 px-5 pb-5 md:hidden">
+          <div className="pointer-events-auto flex flex-col items-center gap-1">
+            <button
+              onPointerDown={() => touch('reverse', true)}
+              onPointerUp={() => touch('reverse', false)}
+              onPointerLeave={() => touch('reverse', false)}
+              onPointerCancel={() => touch('reverse', false)}
+              aria-label="Reverse"
+              className="grid h-14 w-14 select-none place-items-center rounded-full border border-white/15 bg-black/50 text-white backdrop-blur-xl transition active:scale-95 active:bg-white/15"
+            >
+              <ChevronDown className="h-6 w-6" />
+            </button>
+            <span className="font-sans text-[9px] uppercase tracking-[0.18em] text-white/55">Back</span>
+          </div>
+
+          <div className="pointer-events-auto flex flex-col items-center gap-1">
+            <button
+              onPointerDown={() => touch('forward', true)}
+              onPointerUp={() => touch('forward', false)}
+              onPointerLeave={() => touch('forward', false)}
+              onPointerCancel={() => touch('forward', false)}
+              aria-label="Drive forward"
+              className="grid h-[72px] w-[72px] select-none place-items-center rounded-full border border-amber-300/45 bg-amber-400/20 text-white backdrop-blur-xl transition active:scale-95 active:bg-amber-400/35"
+            >
+              <ChevronUp className="h-8 w-8" />
+            </button>
+            <span className="font-sans text-[9px] uppercase tracking-[0.18em] text-amber-200/70">Drive</span>
+          </div>
+
+          <div className="pointer-events-auto flex flex-col items-center gap-1">
+            <button
+              onPointerDown={() => touch('riseKey', true)}
+              onPointerUp={() => touch('riseKey', false)}
+              onPointerLeave={() => touch('riseKey', false)}
+              onPointerCancel={() => touch('riseKey', false)}
+              aria-label="Rise"
+              className="grid h-14 w-14 select-none place-items-center rounded-full border border-cyan-300/35 bg-cyan-400/12 text-white backdrop-blur-xl transition active:scale-95 active:bg-cyan-400/30"
+            >
+              <ChevronsUp className="h-6 w-6" />
+            </button>
+            <span className="font-sans text-[9px] uppercase tracking-[0.18em] text-cyan-200/65">Rise</span>
+          </div>
         </div>
       )}
 
@@ -525,7 +580,7 @@ export default function JourneyPage({ onExit }) {
       )}
 
       {/* ── Milestone card ── */}
-      <div className="pointer-events-none absolute bottom-20 left-0 w-full px-6 sm:bottom-24 sm:px-10">
+      <div className="pointer-events-none absolute bottom-36 left-0 w-full px-6 md:bottom-24 md:px-10">
         <AnimatePresence mode="wait">
           {ms && (
             <motion.div
@@ -553,7 +608,7 @@ export default function JourneyPage({ onExit }) {
       </div>
 
       {/* ── Year timeline (rAF-driven) ── */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 px-6 pb-6 sm:px-10">
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 px-6 pb-28 md:px-10 md:pb-6">
         <div className="mx-auto max-w-3xl">
           <div className="mb-1.5 flex items-end justify-between">
             <span className="font-sans text-[10px] uppercase tracking-[0.2em] text-white/45">2000</span>
@@ -574,14 +629,14 @@ export default function JourneyPage({ onExit }) {
       <AnimatePresence>
         {started && showHint && (
           <motion.div
-            className="pointer-events-none absolute inset-x-0 bottom-32 flex items-center justify-center sm:bottom-36"
+            className="pointer-events-none absolute inset-x-0 bottom-36 hidden items-center justify-center md:flex"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.5 }}
           >
             <div className="rounded-full bg-black/30 px-5 py-2.5 backdrop-blur-md">
-              <span className="font-sans text-xs font-light tracking-wide text-white/75 sm:text-sm">
+              <span className="font-sans text-sm font-light tracking-wide text-white/75">
                 W / ↑ forward · S / ↓ back · Space rise · R radio · M mute
               </span>
             </div>
@@ -622,8 +677,26 @@ export default function JourneyPage({ onExit }) {
               </p>
             </div>
 
-            {/* Keyboard guide */}
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2.5">
+            {/* Mobile touch guide */}
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 md:hidden">
+              <div className="flex items-center gap-1.5 text-white/65">
+                <span className="grid h-7 w-7 place-items-center rounded-full border border-amber-300/45 bg-amber-400/20"><ChevronUp className="h-4 w-4 text-amber-200" /></span>
+                <span className="text-xs">Drive</span>
+              </div>
+              <span className="text-white/20 text-xs">·</span>
+              <div className="flex items-center gap-1.5 text-white/65">
+                <span className="grid h-7 w-7 place-items-center rounded-full border border-white/15 bg-black/40"><ChevronDown className="h-4 w-4 text-white/80" /></span>
+                <span className="text-xs">Back</span>
+              </div>
+              <span className="text-white/20 text-xs">·</span>
+              <div className="flex items-center gap-1.5 text-white/65">
+                <span className="grid h-7 w-7 place-items-center rounded-full border border-cyan-300/35 bg-cyan-400/14"><ChevronsUp className="h-4 w-4 text-cyan-200" /></span>
+                <span className="text-xs">Rise</span>
+              </div>
+            </div>
+
+            {/* Desktop keyboard guide */}
+            <div className="mt-6 hidden flex-wrap items-center justify-center gap-x-5 gap-y-2.5 md:flex">
               <div className="flex items-center gap-1.5 text-white/60">
                 <Kbd>W</Kbd><span className="text-white/25 text-xs">/</span><Kbd>↑</Kbd>
                 <span className="ml-1 text-xs">Forward</span>
@@ -660,7 +733,8 @@ export default function JourneyPage({ onExit }) {
             </motion.button>
 
             <p className="mt-3 font-sans text-[10px] uppercase tracking-[0.22em] text-white/30">
-              or press Space
+              <span className="hidden md:inline">or press Space</span>
+              <span className="md:hidden">or tap to begin</span>
             </p>
           </motion.div>
         )}
