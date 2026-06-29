@@ -50,6 +50,31 @@ export class JourneyAudio {
     [this.car, this.city, this.rain, this.radio].forEach((a) => { try { a.load(); } catch (_) {} });
   }
 
+  // Fully buffer EVERY sound (ambient + all radio stations) so nothing lags
+  // when the journey starts. Resolves once each file can play through (or a
+  // safety timeout). Calls onProgress(0..1) as files complete.
+  preloadAll(onProgress) {
+    const urls = [AMBIENT.car, AMBIENT.city, AMBIENT.rain, ...RADIO_TRACKS.map((t) => t.src)];
+    const total = urls.length;
+    let done = 0;
+    this._preloaders = [];
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = () => { if (!settled) { settled = true; resolve(); } };
+      const bump = () => { done += 1; if (onProgress) onProgress(done / total); if (done >= total) finish(); };
+      urls.forEach((url) => {
+        const a = new Audio();
+        a.preload = 'auto';
+        a.src = url;
+        a.addEventListener('canplaythrough', bump, { once: true });
+        a.addEventListener('error', bump, { once: true });
+        try { a.load(); } catch (_) {}
+        this._preloaders.push(a);
+      });
+      setTimeout(finish, 20000); // never hang the journey on a stalled file
+    });
+  }
+
   start() {
     if (this.started) return;
     this.started = true;

@@ -36,7 +36,8 @@ function yearFromOffset(offset) {
 }
 
 // Fun loading line tied to the asset actually downloading (drei reports the URL).
-function loadingMessage(item, progress, cityReady) {
+function loadingMessage(item, progress, cityReady, audioReady) {
+  if (cityReady && !audioReady) return 'Cueing up the soundtrack';
   if (cityReady) return 'Calibrating the flux capacitor';
   const s = (item || '').toLowerCase();
   if (s.includes('city') || s.includes('cyberpunk')) return 'Rendering the cyberpunk skyline';
@@ -249,16 +250,20 @@ export default function JourneyPage({ onExit }) {
   // A safety net guarantees it never hangs.
   const { progress, active, item } = useProgress();
   const [cityReady, setCityReady] = useState(false);
+  const [audioReady, setAudioReady] = useState(false);
+  const [audioProgress, setAudioProgress] = useState(0);
   const [assetsReady, setAssetsReady] = useState(false);
   const onCityReady = useCallback(() => setCityReady(true), []);
   useEffect(() => {
     if (assetsReady) return undefined;
-    if (cityReady && !active) {
+    // wait for the city (3D) AND every sound to be buffered, so nothing pops
+    // in or buffers after launch.
+    if (cityReady && audioReady && !active) {
       const t = setTimeout(() => setAssetsReady(true), 400); // settle for GPU upload
       return () => clearTimeout(t);
     }
     return undefined;
-  }, [cityReady, active, assetsReady]);
+  }, [cityReady, audioReady, active, assetsReady]);
   useEffect(() => {
     const t = setTimeout(() => setAssetsReady(true), 30000); // safety net
     return () => clearTimeout(t);
@@ -290,7 +295,7 @@ export default function JourneyPage({ onExit }) {
   useEffect(() => {
     const a = new JourneyAudio(tuning.current.audio);
     a.onChange = setRadio;
-    a.preload();
+    a.preloadAll((p) => setAudioProgress(p)).then(() => setAudioReady(true));
     audioRef.current = a;
     return () => { a.onChange = null; a.dispose(); if (audioRef.current === a) audioRef.current = null; };
   }, []);
@@ -656,20 +661,20 @@ export default function JourneyPage({ onExit }) {
             <div className="relative z-10 flex h-full flex-col items-center justify-center px-8 text-center">
               <span className="font-display text-[11px] font-semibold uppercase tracking-[0.42em] text-white/55">My Journey</span>
               <div className="mt-5 font-display text-6xl font-extrabold tabular-nums text-white drop-shadow-[0_2px_16px_rgba(0,0,0,0.7)] sm:text-7xl">
-                {Math.round(Math.min(100, Math.max(progress, cityReady ? 92 : 0)))}
+                {Math.round(Math.min(100, cityReady ? 92 + audioProgress * 8 : Math.min(progress, 88)))}
                 <span className="align-top text-2xl text-white/40">%</span>
               </div>
               <div className="mt-6 h-[3px] w-[min(72vw,380px)] overflow-hidden rounded-full bg-white/15">
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-amber-300 via-pink-400 to-violet-400 transition-[width] duration-300"
                   style={{
-                    width: `${Math.max(6, Math.min(100, Math.max(progress, cityReady ? 92 : 0)))}%`,
+                    width: `${Math.max(6, Math.min(100, cityReady ? 92 + audioProgress * 8 : Math.min(progress, 88)))}%`,
                     boxShadow: '0 0 16px 3px rgba(255,180,120,0.45)',
                   }}
                 />
               </div>
               <p className="mt-5 font-sans text-sm font-light text-white/75 drop-shadow-[0_2px_10px_rgba(0,0,0,0.6)]">
-                {loadingMessage(item, progress, cityReady)}
+                {loadingMessage(item, progress, cityReady, audioReady)}
               </p>
             </div>
           </motion.div>
