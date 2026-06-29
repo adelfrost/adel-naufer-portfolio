@@ -447,7 +447,11 @@ export default function JourneyPage({ onExit }) {
           onCityReady={onCityReady}
           lowPerf={lowPerf}
         />
-        {!lowPerf && (
+        {lowPerf ? (
+          <EffectComposer disableNormalPass>
+            <MotionBlur blurRef={blurRef} />
+          </EffectComposer>
+        ) : (
           <EffectComposer disableNormalPass>
             <Bloom mipmapBlur intensity={0.85} luminanceThreshold={0.55} luminanceSmoothing={0.3} />
             <Vignette eskil={false} offset={0.18} darkness={0.72} />
@@ -475,9 +479,6 @@ export default function JourneyPage({ onExit }) {
             <GuideKey k="M" label="Mute" />
           </div>
         </div>
-        <span className="mt-1 hidden rounded-full bg-black/25 px-3 py-1 font-display text-[10px] font-semibold uppercase tracking-[0.3em] text-amber-200/85 backdrop-blur-sm md:inline-block">
-          Work in Progress
-        </span>
         <div className="flex items-center gap-2">
           <button
             onClick={requestExit}
@@ -496,10 +497,19 @@ export default function JourneyPage({ onExit }) {
       {/* ── Right-side journey log ── */}
       <JourneyNav currentMsIdx={ms ? ms.idx : -1} />
 
-      {/* ── Radio + audio levels (top-center on mobile, bottom-right on desktop) ── */}
+      {/* ── Work in Progress badge (desktop, bottom-right where the radio used to sit) ── */}
       {started && (
-        <div className="pointer-events-auto absolute left-1/2 top-[70px] z-[205] -translate-x-1/2 md:left-auto md:right-7 md:top-auto md:bottom-6 md:translate-x-0">
-          {/* audio levels panel — opens below on mobile, above on desktop */}
+        <span className="pointer-events-none absolute bottom-6 right-7 z-[204] hidden rounded-full bg-black/30 px-3 py-1 font-display text-[10px] font-semibold uppercase tracking-[0.3em] text-amber-200/85 backdrop-blur-sm md:inline-block">
+          Work in Progress
+        </span>
+      )}
+
+      {/* ── Radio + audio levels (top-center on every viewport) ── */}
+      {started && (
+        <div className="pointer-events-auto absolute left-1/2 top-[70px] z-[205] -translate-x-1/2">
+          {/* audio levels panel — drops down, centered under the pill. We center
+              with a negative margin (not -translate-x-1/2) because Motion's y
+              animation writes `transform` and would clobber a translate class. */}
           <AnimatePresence>
             {mixerOpen && (
               <motion.div
@@ -507,7 +517,7 @@ export default function JourneyPage({ onExit }) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.18, ease: EASE }}
-                className="absolute left-1/2 top-full mt-2 w-60 -translate-x-1/2 rounded-2xl border border-white/12 bg-black/75 p-4 backdrop-blur-2xl md:left-auto md:right-0 md:top-auto md:bottom-full md:mb-2 md:mt-0 md:translate-x-0"
+                className="absolute left-1/2 top-full mt-2 -ml-[120px] w-60 rounded-2xl border border-white/12 bg-black/75 p-4 backdrop-blur-2xl"
               >
                 <p className="mb-3 font-display text-[10px] font-bold uppercase tracking-[0.2em] text-white/50">Audio</p>
                 {AUDIO_CHANNELS.map(([ch, label]) => (
