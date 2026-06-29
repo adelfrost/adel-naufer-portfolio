@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { useProgress } from '@react-three/drei';
-import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
+import { EffectComposer, Bloom, Vignette, ChromaticAberration } from '@react-three/postprocessing';
 import { motion, AnimatePresence, useMotionValue, useMotionTemplate, useReducedMotion } from 'motion/react';
 import { Volume2, VolumeX, Radio as RadioIcon, Home as HomeIcon } from 'lucide-react';
 import JourneyScene from './JourneyScene';
@@ -414,6 +414,7 @@ export default function JourneyPage({ onExit }) {
         <EffectComposer disableNormalPass>
           <Bloom mipmapBlur intensity={0.85} luminanceThreshold={0.55} luminanceSmoothing={0.3} />
           <Vignette eskil={false} offset={0.18} darkness={0.72} />
+          <ChromaticAberration offset={[0.0009, 0.0009]} radialModulation modulationOffset={0.35} />
           <MotionBlur blurRef={blurRef} />
         </EffectComposer>
       </Canvas>

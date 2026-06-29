@@ -99,6 +99,14 @@ export default function JourneyScene({ controls, tuning, blurRef, startedRef, on
     state.camera.position.lerp(new THREE.Vector3(t.camera.x, t.camera.y + s.holdY * 0.1, t.camera.z), 0.06);
     state.camera.lookAt(t.car.x, t.camera.lookY + s.holdY * 0.2, t.camera.lookZ);
 
+    // ease the FOV wider while driving forward (W / up) for a sense of speed
+    const fwd = Math.max(0, s.speed) / MAX_SPEED;
+    const targetFov = 50 + fwd * 8.5;
+    if (Math.abs(state.camera.fov - targetFov) > 0.01) {
+      state.camera.fov = lerp(state.camera.fov, targetFov, 0.08);
+      state.camera.updateProjectionMatrix();
+    }
+
     if (onProgress) onProgress(Math.min(s.offset / JOURNEY_LENGTH, 1), s.offset, speedRef.current);
 
     let idx = -1;
