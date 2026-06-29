@@ -54,6 +54,24 @@ function loadingMessage(item, progress, cityReady, audioReady) {
   return 'Almost up to 88 mph';
 }
 
+// One labeled progress row used on the journey loading screen.
+function LoadBar({ label, pct, accent }) {
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between font-sans text-[10px] uppercase tracking-[0.18em] text-white/55">
+        <span>{label}</span>
+        <span className="tabular-nums text-white/45">{pct}%</span>
+      </div>
+      <div className="h-[3px] w-full overflow-hidden rounded-full bg-white/15">
+        <div
+          className={`h-full rounded-full bg-gradient-to-r ${accent} transition-[width] duration-300`}
+          style={{ width: `${Math.max(4, pct)}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 // Journey nav groups
 const NAV_GROUPS = CHAPTERS.map((ch) => ({
   ...ch,
@@ -661,22 +679,25 @@ export default function JourneyPage({ onExit }) {
             <div className="absolute inset-0 bg-[#0a0a1f]/45" />
             <div className="relative z-10 flex h-full flex-col items-center justify-center px-8 text-center">
               <span className="font-display text-[11px] font-semibold uppercase tracking-[0.42em] text-white/55">My Journey</span>
-              <div className="mt-5 font-display text-6xl font-extrabold tabular-nums text-white drop-shadow-[0_2px_16px_rgba(0,0,0,0.7)] sm:text-7xl">
-                {Math.round(Math.min(100, cityReady ? 92 + audioProgress * 8 : Math.min(progress, 88)))}
-                <span className="align-top text-2xl text-white/40">%</span>
-              </div>
-              <div className="mt-6 h-[3px] w-[min(72vw,380px)] overflow-hidden rounded-full bg-white/15">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-amber-300 via-pink-400 to-violet-400 transition-[width] duration-300"
-                  style={{
-                    width: `${Math.max(6, Math.min(100, cityReady ? 92 + audioProgress * 8 : Math.min(progress, 88)))}%`,
-                    boxShadow: '0 0 16px 3px rgba(255,180,120,0.45)',
-                  }}
-                />
-              </div>
-              <p className="mt-5 font-sans text-sm font-light text-white/75 drop-shadow-[0_2px_10px_rgba(0,0,0,0.6)]">
-                {loadingMessage(item, progress, cityReady, audioReady)}
-              </p>
+              {(() => {
+                const worldPct = cityReady ? 100 : Math.min(Math.round(progress), 96);
+                const audioPct = Math.round(audioProgress * 100);
+                const overall = assetsReady ? 100 : Math.round((worldPct + audioPct) / 2);
+                return (
+                  <>
+                    <div className="mt-5 font-display text-6xl font-extrabold tabular-nums text-white drop-shadow-[0_2px_16px_rgba(0,0,0,0.7)] sm:text-7xl">
+                      {overall}<span className="align-top text-2xl text-white/40">%</span>
+                    </div>
+                    <p className="mt-4 font-sans text-sm font-light text-white/75 drop-shadow-[0_2px_10px_rgba(0,0,0,0.6)]">
+                      {loadingMessage(item, progress, cityReady, audioReady)}
+                    </p>
+                    <div className="mt-7 w-[min(76vw,360px)] space-y-3.5">
+                      <LoadBar label="Rendering the world" pct={worldPct} accent="from-amber-300 to-pink-400" />
+                      <LoadBar label="Streaming music & SFX" pct={audioPct} accent="from-cyan-300 to-violet-400" />
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           </motion.div>
         )}

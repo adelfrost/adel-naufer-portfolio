@@ -1,9 +1,10 @@
 // JourneyAudio — ambient bed (engine, city, rain) + a switchable radio.
-// HTML5 Audio elements (looping). Per-frame the engine volume/pitch follows the
+// Every file is fully downloaded into an in-memory Blob before the journey
+// starts and played from a blob URL, so nothing ever buffers mid-flight, not
+// even when switching stations. Per-frame the engine volume/pitch follows the
 // car speed and the rain follows the weather. A 4-channel mixer (music, engine,
-// city, rain) lets the user balance levels. Music can be muted independently.
-// Special case: while the Satie station plays, the city ambience drops out so
-// only rain and engine sit under the piano.
+// city, rain) sets levels. Music can be muted independently. Special case:
+// while Satie plays, the city ambience drops out.
 
 const AMBIENT = {
   car: '/audio/car.mp3',
@@ -30,50 +31,72 @@ export class JourneyAudio {
     this._rain = 0;
     this.mix = { ...DEFAULT_MIX, ...(initialMix || {}) };
     this.onChange = null;
+    this.blobUrls = {};
 
-    this.car = this._mk(AMBIENT.car);
-    this.city = this._mk(AMBIENT.city);
-    this.rain = this._mk(AMBIENT.rain);
-    this.radio = this._mk(RADIO_TRACKS[0].src);
+    this.car = this._mk();
+    this.city = this._mk();
+    this.rain = this._mk();
+    this.radio = this._mk();
   }
 
-  _mk(src) {
+  _mk() {
     const a = new Audio();
-    a.src = src;
     a.loop = true;
     a.preload = 'auto';
     a.volume = 0;
     return a;
   }
 
-  preload() {
+  // Download EVERY sound fully (ambient + all radio stations) into memory and
+  // wire blob URLs into the elements, so playback and station switches never
+  // buffer. Resolves once all are downloaded. Reports byte progress (0..1).
+  async preloadAll(onProgress) {
+    const items = [
+      ['car', AMBIENT.car],
+      ['city', AMBIENT.city],
+      ['rain', AMBIENT.rain],
+      ...RADIO_TRACKS.map((t, i) => [`radio${i}`, t.src]),
+    ];
+    const n = items.length;
+    const frac = new Array(n).fill(0);
+    const report = () => { if (onProgress) onProgress(Math.min(1, frac.reduce((a, b) => a + b, 0) / n)); };
+
+    await Promise.all(items.map(async ([key, url], i) => {
+      try {
+        const res = await fetch(url);
+        const total = Number(res.headers.get('content-length')) || 0;
+        if (!res.body || !total) {
+          const blob = await res.blob();
+          this.blobUrls[key] = URL.createObjectURL(blob);
+          frac[i] = 1; report(); return;
+        }
+        const reader = res.body.getReader();
+        const chunks = [];
+        let loaded = 0;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          loaded += value.length;
+          frac[i] = Math.min(loaded / total, 1);
+          report();
+        }
+        this.blobUrls[key] = URL.createObjectURL(new Blob(chunks));
+        frac[i] = 1; report();
+      } catch (_) {
+        frac[i] = 1; report(); // never block the journey on one failed file
+      }
+    }));
+
+    // play everything from the in-memory blobs (fall back to network url)
+    this.car.src = this.blobUrls.car || AMBIENT.car;
+    this.city.src = this.blobUrls.city || AMBIENT.city;
+    this.rain.src = this.blobUrls.rain || AMBIENT.rain;
+    this.radio.src = this._radioSrc(this.radioIndex);
     [this.car, this.city, this.rain, this.radio].forEach((a) => { try { a.load(); } catch (_) {} });
   }
 
-  // Fully buffer EVERY sound (ambient + all radio stations) so nothing lags
-  // when the journey starts. Resolves once each file can play through (or a
-  // safety timeout). Calls onProgress(0..1) as files complete.
-  preloadAll(onProgress) {
-    const urls = [AMBIENT.car, AMBIENT.city, AMBIENT.rain, ...RADIO_TRACKS.map((t) => t.src)];
-    const total = urls.length;
-    let done = 0;
-    this._preloaders = [];
-    return new Promise((resolve) => {
-      let settled = false;
-      const finish = () => { if (!settled) { settled = true; resolve(); } };
-      const bump = () => { done += 1; if (onProgress) onProgress(done / total); if (done >= total) finish(); };
-      urls.forEach((url) => {
-        const a = new Audio();
-        a.preload = 'auto';
-        a.src = url;
-        a.addEventListener('canplaythrough', bump, { once: true });
-        a.addEventListener('error', bump, { once: true });
-        try { a.load(); } catch (_) {}
-        this._preloaders.push(a);
-      });
-      setTimeout(finish, 20000); // never hang the journey on a stalled file
-    });
-  }
+  _radioSrc(i) { return this.blobUrls[`radio${i}`] || RADIO_TRACKS[i].src; }
 
   start() {
     if (this.started) return;
@@ -83,13 +106,12 @@ export class JourneyAudio {
     this._emit();
   }
 
-  // central volume application — every change routes through here
   _apply() {
     const m = this.mix;
     const satie = this.current().id === 'satie' && !this.musicMuted;
-    this.car.volume = Math.min(1, (0.3 + 0.85 * this._speed) * m.car); // louder engine + strong rev
-    this.car.playbackRate = 0.8 + 0.7 * this._speed; // engine revs with speed
-    this.city.volume = satie ? 0 : 0.42 * m.city;       // city drops under Satie
+    this.car.volume = Math.min(1, (0.3 + 0.85 * this._speed) * m.car);
+    this.car.playbackRate = 0.8 + 0.7 * this._speed;
+    this.city.volume = satie ? 0 : 0.42 * m.city;
     this.rain.volume = 0.72 * this._rain * m.rain;
     this.radio.muted = this.musicMuted;
     this.radio.volume = this.musicMuted ? 0 : 0.55 * m.music;
@@ -107,7 +129,7 @@ export class JourneyAudio {
 
   nextRadio(dir = 1) {
     this.radioIndex = (this.radioIndex + dir + RADIO_TRACKS.length) % RADIO_TRACKS.length;
-    this.radio.src = RADIO_TRACKS[this.radioIndex].src;
+    this.radio.src = this._radioSrc(this.radioIndex);
     this.radio.loop = true;
     try { this.radio.load(); } catch (_) {}
     if (this.started) this.radio.play().catch(() => {});
@@ -135,5 +157,7 @@ export class JourneyAudio {
     [this.car, this.city, this.rain, this.radio].forEach((a) => {
       try { a.pause(); a.removeAttribute('src'); a.load(); } catch (_) {}
     });
+    Object.values(this.blobUrls).forEach((u) => { try { URL.revokeObjectURL(u); } catch (_) {} });
+    this.blobUrls = {};
   }
 }
