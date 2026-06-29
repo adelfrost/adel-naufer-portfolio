@@ -3,7 +3,7 @@ import { Canvas } from '@react-three/fiber';
 import { useProgress } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette, ChromaticAberration } from '@react-three/postprocessing';
 import { motion, AnimatePresence, useMotionValue, useMotionTemplate, useReducedMotion } from 'motion/react';
-import { Volume2, VolumeX, Radio as RadioIcon, Home as HomeIcon, ChevronUp, ChevronDown, ChevronsUp } from 'lucide-react';
+import { Volume2, VolumeX, Radio as RadioIcon, Home as HomeIcon, ChevronUp, ChevronDown, ChevronsUp, SlidersHorizontal } from 'lucide-react';
 import JourneyScene from './JourneyScene';
 import Hyperspeed from './Hyperspeed';
 import TuningPanel from './TuningPanel';
@@ -18,6 +18,8 @@ import CardCanvasReveal from '../components/CardCanvasReveal';
 
 const EASE = [0.16, 1, 0.3, 1];
 const SPRING = { type: 'spring', stiffness: 260, damping: 30, mass: 0.9 };
+const BOUNCE = { type: 'spring', stiffness: 600, damping: 12 };
+const AUDIO_CHANNELS = [['music', 'Music'], ['city', 'Environment Audio'], ['rain', 'Rain'], ['car', 'Engine SFX']];
 // Audio mix lives in tuning.json and is applied automatically. Flip to true to
 // reopen the dev mixer for re-balancing (it never shows on the live site).
 const SHOW_DEV_MIXER = false;
@@ -192,20 +194,19 @@ function JourneyNav({ currentMsIdx }) {
       onClick={() => setOpen((o) => !o)}
     >
       <motion.div
-        className="relative flex overflow-hidden rounded-l-2xl border border-r-0 border-white/10 bg-black/55 backdrop-blur-2xl"
-        animate={{ width: open ? 272 : 28 }}
+        className="relative overflow-hidden rounded-l-2xl border border-r-0 border-white/10 bg-black/60 backdrop-blur-2xl"
+        animate={{ width: open ? 264 : 22, height: open ? 460 : 92 }}
         transition={SPRING}
-        style={{ maxHeight: '85vh' }}
       >
-        {/* Collapsed tab */}
+        {/* Collapsed tab (small + thin) */}
         <motion.div
-          className="absolute right-0 top-0 flex h-full w-7 shrink-0 items-center justify-center"
+          className="absolute inset-0 grid place-items-center"
           animate={{ opacity: open ? 0 : 1 }}
           transition={{ duration: 0.12 }}
           style={{ pointerEvents: 'none' }}
         >
           <span
-            className="select-none font-display text-[8px] font-bold uppercase tracking-[0.28em] text-white/40"
+            className="select-none font-display text-[8px] font-bold uppercase tracking-[0.26em] text-white/45"
             style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
           >
             log
@@ -214,9 +215,10 @@ function JourneyNav({ currentMsIdx }) {
 
         {/* Expanded panel */}
         <motion.div
-          className="w-[272px] shrink-0 overflow-y-auto py-5 pl-5 pr-4"
+          className="absolute inset-0 w-[264px] overflow-y-auto py-4 pl-4 pr-3"
           animate={{ opacity: open ? 1 : 0 }}
           transition={{ duration: 0.18, delay: open ? 0.08 : 0 }}
+          style={{ pointerEvents: open ? 'auto' : 'none' }}
         >
           <p className="mb-4 font-display text-[10px] font-bold uppercase tracking-[0.32em] text-white/50">
             Journey Log
@@ -292,6 +294,14 @@ export default function JourneyPage({ onExit }) {
   const [started, setStarted] = useState(false);
   const [showHint, setShowHint] = useState(true);
   const [leaving, setLeaving] = useState(false);
+  const [mixerOpen, setMixerOpen] = useState(false);
+  // Phones / touch devices get a stripped, cheaper scene so it doesn't lag or
+  // crash: no post-processing, portals, project text, birds or HDR env, capped
+  // pixel ratio. Decided once at mount.
+  const [lowPerf] = useState(() =>
+    typeof window !== 'undefined'
+    && (window.matchMedia('(max-width: 900px)').matches || window.matchMedia('(pointer: coarse)').matches)
+  );
   const [, forceMix] = useState(0);
   const [radio, setRadio] = useState({
     track: RADIO_TRACKS[0], index: 0, total: RADIO_TRACKS.length, musicMuted: false,
@@ -423,8 +433,8 @@ export default function JourneyPage({ onExit }) {
     <div className="fixed inset-0 z-[200] select-none overflow-hidden bg-[#0a0a1f]">
       <Canvas
         camera={{ position: [0, 9, 25], fov: 50 }}
-        dpr={[1, 2]}
-        gl={{ antialias: true, powerPreference: 'high-performance' }}
+        dpr={lowPerf ? 1 : [1, 2]}
+        gl={{ antialias: !lowPerf, powerPreference: 'high-performance' }}
         onCreated={({ gl }) => { gl.toneMappingExposure = 1.05; }}
       >
         <JourneyScene
@@ -435,13 +445,16 @@ export default function JourneyPage({ onExit }) {
           onProgress={onProgress}
           onMilestone={onMilestone}
           onCityReady={onCityReady}
+          lowPerf={lowPerf}
         />
-        <EffectComposer disableNormalPass>
-          <Bloom mipmapBlur intensity={0.85} luminanceThreshold={0.55} luminanceSmoothing={0.3} />
-          <Vignette eskil={false} offset={0.18} darkness={0.72} />
-          <ChromaticAberration offset={[0.0009, 0.0009]} radialModulation modulationOffset={0.35} />
-          <MotionBlur blurRef={blurRef} />
-        </EffectComposer>
+        {!lowPerf && (
+          <EffectComposer disableNormalPass>
+            <Bloom mipmapBlur intensity={0.85} luminanceThreshold={0.55} luminanceSmoothing={0.3} />
+            <Vignette eskil={false} offset={0.18} darkness={0.72} />
+            <ChromaticAberration offset={[0.0009, 0.0009]} radialModulation modulationOffset={0.35} />
+            <MotionBlur blurRef={blurRef} />
+          </EffectComposer>
+        )}
       </Canvas>
 
       <CameraRain tuning={tuning} />
@@ -474,37 +487,82 @@ export default function JourneyPage({ onExit }) {
           >
             <HomeIcon className="h-4 w-4" /> <span className="hidden md:inline">Home</span>
           </button>
-          <JourneyANButton onExit={requestExit} />
+          <div className="hidden md:block">
+            <JourneyANButton onExit={requestExit} />
+          </div>
         </div>
       </div>
 
       {/* ── Right-side journey log ── */}
       <JourneyNav currentMsIdx={ms ? ms.idx : -1} />
 
-      {/* ── Radio (top-center on mobile, bottom-right on desktop) ── */}
+      {/* ── Radio + audio levels (top-center on mobile, bottom-right on desktop) ── */}
       {started && (
-        <div className="pointer-events-auto absolute left-1/2 top-[70px] z-[205] flex -translate-x-1/2 items-center gap-1 rounded-full border border-white/12 bg-black/45 px-1.5 py-1.5 backdrop-blur-xl md:left-auto md:right-7 md:top-auto md:bottom-6 md:translate-x-0">
-          <button
-            onClick={() => audioRef.current && audioRef.current.nextRadio(1)}
-            title="Next station (R or scroll)"
-            className="flex items-center gap-2 rounded-full px-2.5 py-1 transition hover:bg-white/10"
-          >
-            <RadioIcon className="h-4 w-4 shrink-0 text-white/70" />
-            <span className="w-[96px] text-left font-sans text-xs font-medium text-white/85">{radio.track.name}</span>
-            <span className="flex gap-1">
-              {Array.from({ length: radio.total }).map((_, i) => (
-                <span key={i} className={`h-1 w-1 rounded-full ${i === radio.index ? 'bg-white' : 'bg-white/25'}`} />
-              ))}
-            </span>
-          </button>
-          <button
-            onClick={() => audioRef.current && audioRef.current.toggleMusicMute()}
-            title="Mute music (M)"
-            aria-label="Mute music"
-            className="grid h-8 w-8 place-items-center rounded-full transition hover:bg-white/10"
-          >
-            {radio.musicMuted ? <VolumeX className="h-4 w-4 text-white/45" /> : <Volume2 className="h-4 w-4 text-white/80" />}
-          </button>
+        <div className="pointer-events-auto absolute left-1/2 top-[70px] z-[205] -translate-x-1/2 md:left-auto md:right-7 md:top-auto md:bottom-6 md:translate-x-0">
+          {/* audio levels panel — opens below on mobile, above on desktop */}
+          <AnimatePresence>
+            {mixerOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.18, ease: EASE }}
+                className="absolute left-1/2 top-full mt-2 w-60 -translate-x-1/2 rounded-2xl border border-white/12 bg-black/75 p-4 backdrop-blur-2xl md:left-auto md:right-0 md:top-auto md:bottom-full md:mb-2 md:mt-0 md:translate-x-0"
+              >
+                <p className="mb-3 font-display text-[10px] font-bold uppercase tracking-[0.2em] text-white/50">Audio</p>
+                {AUDIO_CHANNELS.map(([ch, label]) => (
+                  <label key={ch} className="mb-2.5 block">
+                    <div className="mb-1 flex justify-between text-[11px] text-white/70">
+                      <span>{label}</span>
+                      <span className="tabular-nums text-white/45">{Math.round(((radio.mix && radio.mix[ch]) || 0) * 100)}</span>
+                    </div>
+                    <input
+                      type="range" min="0" max="1" step="0.02"
+                      value={(radio.mix && radio.mix[ch]) || 0}
+                      onChange={(e) => audioRef.current && audioRef.current.setMix(ch, +e.target.value)}
+                      className="h-1 w-full cursor-pointer accent-cyan-400"
+                    />
+                  </label>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* pill */}
+          <div className="flex items-center gap-1 rounded-full border border-white/12 bg-black/45 px-1.5 py-1.5 backdrop-blur-xl">
+            <motion.button
+              whileTap={{ scale: 0.85 }} transition={BOUNCE}
+              onClick={() => audioRef.current && audioRef.current.nextRadio(1)}
+              title="Next station (R or scroll)"
+              className="flex items-center gap-2 rounded-full px-2.5 py-1 transition hover:bg-white/10"
+            >
+              <RadioIcon className="h-4 w-4 shrink-0 text-white/70" />
+              <span className="w-[84px] text-left font-sans text-xs font-medium text-white/85">{radio.track.name}</span>
+              <span className="flex gap-1">
+                {Array.from({ length: radio.total }).map((_, i) => (
+                  <span key={i} className={`h-1 w-1 rounded-full ${i === radio.index ? 'bg-white' : 'bg-white/25'}`} />
+                ))}
+              </span>
+            </motion.button>
+            <motion.button
+              whileTap={{ scale: 0.85 }} transition={BOUNCE}
+              onClick={() => setMixerOpen((o) => !o)}
+              title="Audio levels"
+              aria-label="Audio levels"
+              className={`grid h-8 w-8 place-items-center rounded-full transition hover:bg-white/10 ${mixerOpen ? 'bg-white/10' : ''}`}
+            >
+              <SlidersHorizontal className="h-4 w-4 text-white/75" />
+            </motion.button>
+            <motion.button
+              whileTap={{ scale: 0.85 }} transition={BOUNCE}
+              onClick={() => audioRef.current && audioRef.current.toggleMusicMute()}
+              title="Mute music (M)"
+              aria-label="Mute music"
+              className="grid h-8 w-8 place-items-center rounded-full transition hover:bg-white/10"
+            >
+              {radio.musicMuted ? <VolumeX className="h-4 w-4 text-white/45" /> : <Volume2 className="h-4 w-4 text-white/80" />}
+            </motion.button>
+          </div>
         </div>
       )}
 

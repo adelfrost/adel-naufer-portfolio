@@ -236,8 +236,8 @@ export function Portals({ sim, tuning }) {
   ));
 }
 
-export function Rain({ tuning }) {
-  const COUNT = 2200;
+export function Rain({ tuning, lowPerf }) {
+  const COUNT = lowPerf ? 650 : 2200;
   const geom = useMemo(() => {
     const pos = new Float32Array(COUNT * 2 * 3);
     for (let i = 0; i < COUNT; i += 1) {
@@ -250,7 +250,7 @@ export function Rain({ tuning }) {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     return g;
-  }, []);
+  }, [COUNT]);
   const matRef = useRef();
   const groupRef = useRef();
   useFrame((_, dt) => {

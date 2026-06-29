@@ -17,7 +17,7 @@ export const STATS = [
   { num: '13',   sub: 'YEARS OF\nEXPERIENCE', countTo: 13 },
   { num: '400+', sub: 'CLIENTS',               countTo: 400, suffix: '+' },
   { num: '$5M+', sub: 'SAVED\nANNUALLY',       countTo: 5,   prefix: '$', suffix: 'M+' },
-  { num: 'GCC',  sub: 'REGIONS\nCOVERED' },
+  { num: 'GCC + EU', sub: 'REGIONS\nCOVERED' },
 ];
 
 // Background video for the hero (wheat-field landing)

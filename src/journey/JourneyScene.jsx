@@ -35,7 +35,7 @@ function CarFallback() {
   );
 }
 
-export default function JourneyScene({ controls, tuning, blurRef, startedRef, onProgress, onMilestone, onCityReady }) {
+export default function JourneyScene({ controls, tuning, blurRef, startedRef, onProgress, onMilestone, onCityReady, lowPerf }) {
   const carRef = useRef();
   const sim = useRef({ dist: 0, offset: 0, speed: 0, holdY: 0, vel: 0, nudge: 0 });
   const speedRef = useRef(0);
@@ -124,30 +124,34 @@ export default function JourneyScene({ controls, tuning, blurRef, startedRef, on
     <>
       <Sky texture={tex.sky} />
       <fogExp2 attach="fog" args={['#3a2350', 0.012]} />
-      <Stars radius={160} depth={60} count={1800} factor={3} saturation={0} fade speed={0.5} />
+      <Stars radius={160} depth={60} count={lowPerf ? 500 : 1800} factor={3} saturation={0} fade speed={0.5} />
 
       <hemisphereLight args={['#9fb6ff', '#2a1838', 0.7]} />
       <directionalLight position={[-12, 10, 6]} intensity={1.6} color="#ffd6b0" />
       <pointLight position={[-10, 2, 2]} intensity={120} distance={60} color="#ff3d7f" />
       <pointLight position={[12, 4, -4]} intensity={120} distance={60} color="#19c6ff" />
-      <ambientLight intensity={0.35} />
-      <Suspense fallback={null}>
-        <Environment preset="night" />
-      </Suspense>
+      <ambientLight intensity={lowPerf ? 0.55 : 0.35} />
+      {!lowPerf && (
+        <Suspense fallback={null}>
+          <Environment preset="night" />
+        </Suspense>
+      )}
 
       <Suspense fallback={null}>
         <MountainsBackdrop tuning={tuning} />
         <City sim={sim} tuning={tuning} onReady={onCityReady} />
         <Prop tuning={tuning} />
         <Clouds tuning={tuning} />
-        <Birds />
-        <Portals sim={sim} tuning={tuning} />
+        {!lowPerf && <Birds />}
+        {!lowPerf && <Portals sim={sim} tuning={tuning} />}
       </Suspense>
-      <Rain tuning={tuning} />
+      <Rain tuning={tuning} lowPerf={lowPerf} />
       <SpeedLines speedRef={speedRef} tuning={tuning} />
-      <Suspense fallback={null}>
-        <ProjectTexts sim={sim} tuning={tuning} />
-      </Suspense>
+      {!lowPerf && (
+        <Suspense fallback={null}>
+          <ProjectTexts sim={sim} tuning={tuning} />
+        </Suspense>
+      )}
 
       <group ref={carRef}>
         <Suspense fallback={<CarFallback />}>
