@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useGLTF, useTexture } from '@react-three/drei';
 import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.js';
@@ -52,11 +52,20 @@ function useFit(scene) {
   }, [scene]);
 }
 
-export function City({ sim, tuning }) {
-  const { scene } = useGLTF(CITY_URL, true);
+export function City({ sim, tuning, onReady }) {
+  const { scene } = useGLTF(CITY_URL, '/draco/');
+  const cloned = useMemo(() => scene.clone(true), [scene]);
   const fit = useFit(scene);
   const ref = useRef();
   const inv = 1 / fit.maxDim;
+  // City only renders past Suspense once its GLTF is fully parsed (Draco
+  // decoded), so this effect is a reliable "the city is in the scene" signal.
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.log('[journey] city loaded · center', fit.center.toArray().map((n) => Math.round(n)), '· maxDim', Math.round(fit.maxDim));
+    }
+    if (onReady) onReady();
+  }, [onReady]); // eslint-disable-line react-hooks/exhaustive-deps
   useFrame(() => {
     const g = ref.current;
     if (!g) return;
@@ -67,13 +76,13 @@ export function City({ sim, tuning }) {
   });
   return (
     <group ref={ref}>
-      <primitive object={scene} scale={inv} position={[-fit.center.x * inv, -fit.center.y * inv, -fit.center.z * inv]} />
+      <primitive object={cloned} scale={inv} position={[-fit.center.x * inv, -fit.center.y * inv, -fit.center.z * inv]} />
     </group>
   );
 }
 
 export function MountainsBackdrop({ tuning }) {
-  const { scene } = useGLTF(MOUNTAIN_URL, true);
+  const { scene } = useGLTF(MOUNTAIN_URL, '/draco/');
   const fit = useFit(scene);
   const inv = 1 / fit.maxDim;
   const clone = useMemo(() => scene.clone(true), [scene]);
@@ -94,7 +103,8 @@ export function MountainsBackdrop({ tuning }) {
 
 // ── Burj Khalifa (placeable prop, tuned via tuning.prop) ───────────────────
 export function Prop({ tuning }) {
-  const { scene } = useGLTF(PROP_URL, true);
+  const { scene } = useGLTF(PROP_URL, '/draco/');
+  const cloned = useMemo(() => scene.clone(true), [scene]);
   const fit = useFit(scene);
   const inv = 1 / fit.maxDim;
   const ref = useRef();
@@ -110,7 +120,7 @@ export function Prop({ tuning }) {
   });
   return (
     <group ref={ref}>
-      <primitive object={scene} scale={inv} position={[-fit.center.x * inv, -fit.center.y * inv, -fit.center.z * inv]} />
+      <primitive object={cloned} scale={inv} position={[-fit.center.x * inv, -fit.center.y * inv, -fit.center.z * inv]} />
     </group>
   );
 }
@@ -317,7 +327,7 @@ export function SpeedLines({ speedRef, tuning }) {
   );
 }
 
-useGLTF.preload(CITY_URL, true);
-useGLTF.preload(MOUNTAIN_URL, true);
+useGLTF.preload(CITY_URL, '/draco/');
+useGLTF.preload(MOUNTAIN_URL, '/draco/');
 useGLTF.preload(BIRDS_URL);
-useGLTF.preload(PROP_URL, true);
+useGLTF.preload(PROP_URL, '/draco/');

@@ -16,10 +16,11 @@ const EASE = [0.16, 1, 0.3, 1];
  * LoadingScreen — full-page intro. A MagnetLines field reacts to the cursor
  * behind a lamp-style glowing progress bar.
  *
- * The bar tracks REAL progress: it fully downloads every full-viewport
- * background video (streamed, byte-accurate) and only reveals the site once
- * they're all in the browser cache — so no backdrop pops in afterwards. A hard
- * cap still fires so a slow/failed asset can never hang the intro forever.
+ * It buffers EVERY full-viewport background video (via real <video> elements,
+ * so it works for the cross-origin contact clip too) and only reveals the site
+ * once they can all play through. That way a slow connection never lands on the
+ * page with missing backdrops. A hard safety cap still fires so one stalled or
+ * failed asset can never hang the intro forever.
  */
 export default function LoadingScreen() {
   const reduced = useReducedMotion();
@@ -27,6 +28,7 @@ export default function LoadingScreen() {
   const progress = useMotionValue(0);
   const barWidth = useTransform(progress, (v) => `${Math.min(100, v * 100)}%`);
   const glowWidth = useTransform(progress, (v) => `${Math.min(100, v * 100)}%`);
+  const pctText = useTransform(progress, (v) => `${Math.round(Math.min(100, v * 100))}%`);
 
   useEffect(() => {
     const prevOverflow = document.body.style.overflow;
@@ -34,10 +36,10 @@ export default function LoadingScreen() {
 
     const start = performance.now();
     let done = false;
+    let cancelled = false;
     let readyTimer = 0;
     let hideTimer = 0;
-    let cancelled = false;
-    const controllers = [];
+    let raf = 0;
 
     const finish = () => {
       if (done) return;
@@ -45,59 +47,60 @@ export default function LoadingScreen() {
       const minShow = reduced ? 350 : 1100;
       const wait = Math.max(0, minShow - (performance.now() - start));
       readyTimer = setTimeout(() => {
-        animate(progress, 1, { duration: reduced ? 0.2 : 0.42, ease: EASE }); // cosmetic fill
-        // Reveal on a plain timer — never gated on the rAF animation completing.
+        animate(progress, 1, { duration: reduced ? 0.2 : 0.42, ease: EASE }); // cosmetic top-up
         hideTimer = setTimeout(() => setHidden(true), reduced ? 220 : 560);
       }, wait);
     };
 
-    // ── Real download progress: stream every backdrop, sum bytes ────────────
+    // ── Buffer every backdrop video; track per-video readiness ──────────────
     const n = PRELOAD_VIDEOS.length;
-    const frac = new Array(n).fill(0); // per-asset 0..1
-    const setBar = () => {
-      const avg = frac.reduce((a, b) => a + b, 0) / (n || 1);
-      // hold the last sliver for the finish() animation so it reads as "done"
-      progress.set(Math.min(avg, 1) * 0.94);
-    };
-
-    const fetchOne = async (url, i) => {
-      try {
-        const ctrl = new AbortController();
-        controllers.push(ctrl);
-        const res = await fetch(url, { signal: ctrl.signal });
-        const total = Number(res.headers.get('content-length')) || 0;
-        if (!res.body || !total) {
-          await res.blob();            // no length header — count as done on resolve
-          frac[i] = 1; setBar(); return;
-        }
-        const reader = res.body.getReader();
-        let loaded = 0;
-        for (;;) {
-          const { done: rdone, value } = await reader.read();
-          if (rdone || cancelled) break;
-          loaded += value.length;
-          frac[i] = Math.min(loaded / total, 1);
-          setBar();
-        }
-        frac[i] = 1; setBar();
-      } catch (_) {
-        frac[i] = 1; setBar();          // never let one asset block the reveal
-      }
-    };
-
-    Promise.allSettled(PRELOAD_VIDEOS.map(fetchOne)).then(() => {
-      if (!cancelled) finish();
+    const ready = new Array(n).fill(false);
+    const timers = [];
+    const vids = PRELOAD_VIDEOS.map((url, i) => {
+      const v = document.createElement('video');
+      v.preload = 'auto';
+      v.muted = true;
+      v.playsInline = true;
+      // NB: no crossOrigin — plain playback/buffering needs no CORS, and setting
+      // it would break the cross-origin clip if the CDN omits CORS headers.
+      v.src = url;
+      const markReady = () => { ready[i] = true; };
+      v.addEventListener('canplaythrough', markReady, { once: true });
+      v.addEventListener('error', markReady, { once: true });     // never block on failure
+      timers.push(setTimeout(markReady, reduced ? 4000 : 45000)); // per-asset stall release
+      try { v.load(); } catch (_) {}
+      return v;
     });
 
-    // Safety net: download is generous but must never hang the site.
-    const cap = setTimeout(finish, reduced ? 2500 : 14000);
+    const setBar = () => {
+      let sum = 0;
+      for (let i = 0; i < n; i += 1) {
+        if (ready[i]) { sum += 1; continue; }
+        const v = vids[i];
+        const d = v.duration;
+        if (d && Number.isFinite(d) && v.buffered.length) {
+          sum += Math.min(v.buffered.end(v.buffered.length - 1) / d, 1);
+        }
+      }
+      const avg = sum / (n || 1);
+      progress.set(Math.min(avg, 1) * 0.96); // hold the last sliver for finish()
+      if (!cancelled && ready.every(Boolean)) finish();
+    };
+
+    const poll = () => { raf = requestAnimationFrame(poll); setBar(); };
+    raf = requestAnimationFrame(poll);
+
+    // Hard safety net: generous on a slow line, but never an infinite hang.
+    const cap = setTimeout(finish, reduced ? 2500 : 150000);
 
     return () => {
       cancelled = true;
-      controllers.forEach((c) => { try { c.abort(); } catch (_) {} });
+      cancelAnimationFrame(raf);
       clearTimeout(cap);
       clearTimeout(readyTimer);
       clearTimeout(hideTimer);
+      timers.forEach(clearTimeout);
+      vids.forEach((v) => { try { v.removeAttribute('src'); v.load(); } catch (_) {} });
       document.body.style.overflow = prevOverflow;
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -165,6 +168,15 @@ export default function LoadingScreen() {
                     boxShadow: '0 0 18px 4px rgba(196,181,253,0.5)',
                   }}
                 />
+              </div>
+              {/* percentage + label */}
+              <div className="mt-3 flex items-center justify-between">
+                <span className="font-sans text-[10px] uppercase tracking-[0.3em] text-white/35">
+                  Loading
+                </span>
+                <motion.span className="font-sans text-[11px] font-medium tabular-nums text-white/55">
+                  {pctText}
+                </motion.span>
               </div>
             </div>
           </div>

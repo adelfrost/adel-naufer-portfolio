@@ -1,13 +1,16 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { Loader, useProgress } from '@react-three/drei';
+import { useProgress } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import { motion, AnimatePresence, useMotionValue, useMotionTemplate, useReducedMotion } from 'motion/react';
+import { Volume2, VolumeX, Radio as RadioIcon, Home as HomeIcon } from 'lucide-react';
 import JourneyScene from './JourneyScene';
+import Hyperspeed from './Hyperspeed';
 import TuningPanel from './TuningPanel';
 import CameraRain from './CameraRain';
 import { MotionBlur } from './effects';
 import { useJourneyControls } from './useFlightControls';
+import { JourneyAudio, RADIO_TRACKS } from './audio';
 import { CHAPTERS, MILESTONES, JOURNEY_LENGTH } from './journeyData';
 import { PROJECT_TEXTS } from './journeyItems';
 import tuningDefaults from './tuning.json';
@@ -15,6 +18,9 @@ import CardCanvasReveal from '../components/CardCanvasReveal';
 
 const EASE = [0.16, 1, 0.3, 1];
 const SPRING = { type: 'spring', stiffness: 260, damping: 30, mass: 0.9 };
+// Audio mix lives in tuning.json and is applied automatically. Flip to true to
+// reopen the dev mixer for re-balancing (it never shows on the live site).
+const SHOW_DEV_MIXER = false;
 const CARD_PHOTO = '/img/adel-card.png';
 const PILL_W = 62, PILL_H = 44, CARD_W = 250, CARD_H = 338;
 
@@ -29,6 +35,24 @@ function yearFromOffset(offset) {
   return y;
 }
 
+// Fun loading line tied to the asset actually downloading (drei reports the URL).
+function loadingMessage(item, progress, cityReady) {
+  if (cityReady) return 'Calibrating the flux capacitor';
+  const s = (item || '').toLowerCase();
+  if (s.includes('city') || s.includes('cyberpunk')) return 'Rendering the cyberpunk skyline';
+  if (s.includes('mountain')) return 'Raising the distant mountains';
+  if (s.includes('burj')) return 'Standing up the Burj Khalifa';
+  if (s.includes('delorean')) return 'Fuelling the DeLorean';
+  if (s.includes('bird')) return 'Releasing the night birds';
+  if (s.includes('cloud')) return 'Seeding the clouds';
+  if (s.includes('.hdr') || s.includes('env') || s.includes('night')) return 'Lighting the night sky';
+  if (s.includes('audio') || s.includes('.wav') || s.includes('.mp3')) return 'Tuning the radio';
+  if (progress < 15) return 'Synchronizing the Animus';
+  if (progress < 50) return 'Charging the time circuits';
+  if (progress < 85) return 'Spinning up the city grid';
+  return 'Almost up to 88 mph';
+}
+
 // Journey nav groups
 const NAV_GROUPS = CHAPTERS.map((ch) => ({
   ...ch,
@@ -40,6 +64,16 @@ function Kbd({ children }) {
   return (
     <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded border border-white/25 bg-white/10 px-1.5 font-mono text-[10px] font-semibold text-white shadow-[inset_0_-1px_0_rgba(0,0,0,0.4)]">
       {children}
+    </span>
+  );
+}
+
+// ── Compact inline control hint (key + label) ──────────────────────────────
+function GuideKey({ k, label }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[10px] text-white/55 drop-shadow-[0_1px_6px_rgba(0,0,0,0.6)]">
+      <span className="rounded border border-white/20 bg-white/10 px-1.5 py-0.5 font-mono text-[9px] font-semibold text-white/85">{k}</span>
+      {label}
     </span>
   );
 }
@@ -209,40 +243,92 @@ function JourneyNav({ currentMsIdx }) {
 
 // ── Main page ──────────────────────────────────────────────────────────────
 export default function JourneyPage({ onExit }) {
-  // Asset-loading gate: use drei's global progress store
-  const { active: loadActive } = useProgress();
-  const everActive = useRef(false);
+  // Asset-loading gate: hold the playable start screen until the CITY is
+  // actually parsed and mounted in the scene (a deterministic onReady signal,
+  // not byte progress) AND all loaders are idle, so nothing pops in after.
+  // A safety net guarantees it never hangs.
+  const { progress, active, item } = useProgress();
+  const [cityReady, setCityReady] = useState(false);
   const [assetsReady, setAssetsReady] = useState(false);
-
+  const onCityReady = useCallback(() => setCityReady(true), []);
   useEffect(() => {
-    if (loadActive) { everActive.current = true; return undefined; }
-    // If we've seen loading start+finish: short grace period.
-    // If loading never started (all cached): longer wait.
-    const delay = everActive.current ? 450 : 1600;
-    const t = setTimeout(() => setAssetsReady(true), delay);
+    if (assetsReady) return undefined;
+    if (cityReady && !active) {
+      const t = setTimeout(() => setAssetsReady(true), 400); // settle for GPU upload
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, [cityReady, active, assetsReady]);
+  useEffect(() => {
+    const t = setTimeout(() => setAssetsReady(true), 30000); // safety net
     return () => clearTimeout(t);
-  }, [loadActive]);
+  }, []);
 
   const [ms, setMs] = useState(null);
   const [started, setStarted] = useState(false);
   const [showHint, setShowHint] = useState(true);
+  const [leaving, setLeaving] = useState(false);
+  const [, forceMix] = useState(0);
+  const [radio, setRadio] = useState({
+    track: RADIO_TRACKS[0], index: 0, total: RADIO_TRACKS.length, musicMuted: false,
+    mix: { music: 0.8, car: 1, city: 0.7, rain: 0.85, ...(tuningDefaults.audio || {}) },
+  });
 
   const tuning = useRef(JSON.parse(JSON.stringify(tuningDefaults)));
   const blurRef = useRef(0);
   const startedRef = useRef(false);
   const progressRef = useRef(0);
   const offsetRef = useRef(0);
+  const speedRef = useRef(0);
+  const audioRef = useRef(null);
 
   const controls = useJourneyControls(() => setShowHint(false));
 
-  const onProgress = useCallback((p, rawOffset) => {
+  // Create the audio engine on mount, tear it down on unmount. Done in an effect
+  // (not during render) so React 18 StrictMode's mount/unmount/mount in dev
+  // yields a fresh, working instance instead of a disposed, silent one.
+  useEffect(() => {
+    const a = new JourneyAudio(tuning.current.audio);
+    a.onChange = setRadio;
+    a.preload();
+    audioRef.current = a;
+    return () => { a.onChange = null; a.dispose(); if (audioRef.current === a) audioRef.current = null; };
+  }, []);
+
+  // Leave the journey through a warp transition back home.
+  const requestExit = useCallback(() => {
+    setLeaving((wasLeaving) => {
+      if (wasLeaving) return true;
+      if (audioRef.current) { try { audioRef.current.dispose(); } catch (_) {} }
+      setTimeout(() => onExit(), 1500);
+      return true;
+    });
+  }, [onExit]);
+
+  // Dev-only audio mixer: live-adjust the mix and save it into tuning.json as
+  // permanent settings (not shown on the live site).
+  const setMix = useCallback((ch, v) => {
+    tuning.current.audio[ch] = v;
+    if (audioRef.current) audioRef.current.setMix(ch, v);
+    forceMix((n) => n + 1);
+  }, []);
+  const saveMix = useCallback(async () => {
+    try { await fetch('/_save-tuning', { method: 'POST', body: JSON.stringify(tuning.current) }); } catch (_) {}
+  }, []);
+
+  const onProgress = useCallback((p, rawOffset, speed) => {
     progressRef.current = p;
     offsetRef.current = rawOffset != null ? rawOffset : p * JOURNEY_LENGTH;
+    if (speed != null) speedRef.current = speed;
   }, []);
 
   const onMilestone = useCallback((m, idx) => setMs(m ? { ...m, idx } : null), []);
 
-  const begin = useCallback(() => { startedRef.current = true; setStarted(true); }, []);
+  const begin = useCallback(() => {
+    startedRef.current = true;
+    setStarted(true);
+    if (audioRef.current) audioRef.current.start();
+  }, []);
 
   useEffect(() => {
     if (started || !assetsReady) return undefined;
@@ -250,6 +336,26 @@ export default function JourneyPage({ onExit }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [started, assetsReady, begin]);
+
+  // radio (R / scroll) + mute music (M) while flying
+  useEffect(() => {
+    if (!started) return undefined;
+    const onKey = (e) => {
+      const a = audioRef.current; if (!a) return;
+      if (e.code === 'KeyR') a.nextRadio(1);
+      else if (e.code === 'KeyM') a.toggleMusicMute();
+    };
+    const onWheel = (e) => {
+      const a = audioRef.current; if (!a) return;
+      if (Math.abs(e.deltaY) > 4) a.nextRadio(e.deltaY > 0 ? 1 : -1);
+    };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('wheel', onWheel, { passive: true });
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('wheel', onWheel);
+    };
+  }, [started]);
 
   const chapter = ms ? CHAPTERS.find((c) => c.key === ms.chapter) : null;
 
@@ -267,6 +373,11 @@ export default function JourneyPage({ onExit }) {
       if (fill) fill.style.width = pct;
       if (dot) dot.style.left = pct;
       if (year) year.textContent = yearFromOffset(off);
+      const a = audioRef.current;
+      if (a && a.started) {
+        a.setSpeed(speedRef.current);
+        a.setRain((tuning.current.weather && tuning.current.weather.rain) || 0);
+      }
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
@@ -293,6 +404,7 @@ export default function JourneyPage({ onExit }) {
           startedRef={startedRef}
           onProgress={onProgress}
           onMilestone={onMilestone}
+          onCityReady={onCityReady}
         />
         <EffectComposer disableNormalPass>
           <Bloom mipmapBlur intensity={0.85} luminanceThreshold={0.55} luminanceSmoothing={0.3} />
@@ -306,18 +418,87 @@ export default function JourneyPage({ onExit }) {
       {false && <TuningPanel tuning={tuning} />}
 
       {/* ── HUD top bar ── */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between px-6 py-5 sm:px-10">
-        <span className="font-display text-xs font-semibold uppercase tracking-[0.34em] text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]">
-          My Journey
-        </span>
-        <span className="rounded-full bg-black/25 px-3 py-1 font-display text-[10px] font-semibold uppercase tracking-[0.3em] text-amber-200/85 backdrop-blur-sm">
+      <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between px-6 py-5 sm:px-10">
+        <div className="flex flex-col gap-2">
+          <span className="font-display text-xs font-semibold uppercase tracking-[0.34em] text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]">
+            My Journey
+          </span>
+          {/* persistent controls guide */}
+          <div className="hidden flex-wrap items-center gap-x-3 gap-y-1.5 sm:flex">
+            <GuideKey k="W / S" label="Drive" />
+            <GuideKey k="Space" label="Rise" />
+            <GuideKey k="R" label="Radio" />
+            <GuideKey k="M" label="Mute" />
+          </div>
+        </div>
+        <span className="mt-1 rounded-full bg-black/25 px-3 py-1 font-display text-[10px] font-semibold uppercase tracking-[0.3em] text-amber-200/85 backdrop-blur-sm">
           Work in Progress
         </span>
-        <JourneyANButton onExit={onExit} />
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={requestExit}
+            title="Back to home"
+            className="pointer-events-auto inline-flex h-11 items-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-4 font-sans text-sm font-medium text-white backdrop-blur-xl transition hover:bg-white/12"
+          >
+            <HomeIcon className="h-4 w-4" /> Home
+          </button>
+          <JourneyANButton onExit={requestExit} />
+        </div>
       </div>
 
       {/* ── Right-side journey log ── */}
       <JourneyNav currentMsIdx={ms ? ms.idx : -1} />
+
+      {/* ── Radio (bottom-right) ── */}
+      {started && (
+        <div className="pointer-events-auto absolute bottom-6 right-5 z-[205] flex items-center gap-1 rounded-full border border-white/12 bg-black/45 px-1.5 py-1.5 backdrop-blur-xl sm:right-7">
+          <button
+            onClick={() => audioRef.current && audioRef.current.nextRadio(1)}
+            title="Next station (R or scroll)"
+            className="flex items-center gap-2 rounded-full px-2.5 py-1 transition hover:bg-white/10"
+          >
+            <RadioIcon className="h-4 w-4 shrink-0 text-white/70" />
+            <span className="w-[96px] text-left font-sans text-xs font-medium text-white/85">{radio.track.name}</span>
+            <span className="flex gap-1">
+              {Array.from({ length: radio.total }).map((_, i) => (
+                <span key={i} className={`h-1 w-1 rounded-full ${i === radio.index ? 'bg-white' : 'bg-white/25'}`} />
+              ))}
+            </span>
+          </button>
+          <button
+            onClick={() => audioRef.current && audioRef.current.toggleMusicMute()}
+            title="Mute music (M)"
+            aria-label="Mute music"
+            className="grid h-8 w-8 place-items-center rounded-full transition hover:bg-white/10"
+          >
+            {radio.musicMuted ? <VolumeX className="h-4 w-4 text-white/45" /> : <Volume2 className="h-4 w-4 text-white/80" />}
+          </button>
+        </div>
+      )}
+
+      {/* ── Audio mixer (hidden; tuning.json holds the saved mix) ── */}
+      {SHOW_DEV_MIXER && started && (
+        <div className="pointer-events-auto absolute bottom-6 left-5 z-[205] w-52 rounded-2xl border border-white/12 bg-black/70 p-3.5 backdrop-blur-2xl sm:left-7">
+          <p className="mb-2 font-display text-[10px] font-bold uppercase tracking-[0.2em] text-white/45">Audio mixer · dev</p>
+          {[['music', 'Music'], ['car', 'Engine'], ['city', 'City'], ['rain', 'Rain']].map(([ch, label]) => (
+            <label key={ch} className="mb-2 block">
+              <div className="mb-1 flex justify-between text-[11px] text-white/70">
+                <span>{label}</span>
+                <span className="tabular-nums text-white/45">{Math.round((tuning.current.audio[ch] || 0) * 100)}</span>
+              </div>
+              <input
+                type="range" min="0" max="1" step="0.02"
+                value={tuning.current.audio[ch] || 0}
+                onChange={(e) => setMix(ch, +e.target.value)}
+                className="h-1 w-full cursor-pointer accent-pink-400"
+              />
+            </label>
+          ))}
+          <button onClick={saveMix} className="mt-1 w-full rounded-lg bg-pink-500 py-1.5 text-xs font-semibold text-white transition hover:bg-pink-400">
+            Save mix to config
+          </button>
+        </div>
+      )}
 
       {/* ── Milestone card ── */}
       <div className="pointer-events-none absolute bottom-20 left-0 w-full px-6 sm:bottom-24 sm:px-10">
@@ -377,7 +558,7 @@ export default function JourneyPage({ onExit }) {
           >
             <div className="rounded-full bg-black/30 px-5 py-2.5 backdrop-blur-md">
               <span className="font-sans text-xs font-light tracking-wide text-white/75 sm:text-sm">
-                W / ↑ forward · S / ↓ back · Space to rise
+                W / ↑ forward · S / ↓ back · Space rise · R radio · M mute
               </span>
             </div>
           </motion.div>
@@ -412,7 +593,7 @@ export default function JourneyPage({ onExit }) {
               <p className="font-sans text-[12px] leading-relaxed text-white/70">
                 <span className="mr-1.5 text-amber-300">⚡</span>
                 Yes, that's the actual <span className="font-semibold text-white">Back to the Future</span> DeLorean.
-                You can fly forward through my career — or gun it in reverse.
+                You can fly forward through my career, or gun it in reverse.
                 Time is yours.
               </p>
             </div>
@@ -433,6 +614,16 @@ export default function JourneyPage({ onExit }) {
                 <Kbd>Space</Kbd>
                 <span className="ml-1 text-xs">Rise</span>
               </div>
+              <span className="text-white/20 text-xs">·</span>
+              <div className="flex items-center gap-1.5 text-white/60">
+                <Kbd>R</Kbd>
+                <span className="ml-1 text-xs">Radio</span>
+              </div>
+              <span className="text-white/20 text-xs">·</span>
+              <div className="flex items-center gap-1.5 text-white/60">
+                <Kbd>M</Kbd>
+                <span className="ml-1 text-xs">Mute</span>
+              </div>
             </div>
 
             <motion.button
@@ -451,12 +642,67 @@ export default function JourneyPage({ onExit }) {
         )}
       </AnimatePresence>
 
-      <Loader
-        containerStyles={{ background: '#0a0a1f', zIndex: 207 }}
-        innerStyles={{ background: 'rgba(255,255,255,0.14)' }}
-        barStyles={{ background: '#ff3d7f' }}
-        dataStyles={{ color: '#cbb3e6', fontFamily: 'Manrope, sans-serif', fontSize: '13px' }}
-      />
+      {/* ── Themed loading screen over a warp background, tied to real progress ── */}
+      <AnimatePresence>
+        {!assetsReady && (
+          <motion.div
+            className="absolute inset-0 z-[208] overflow-hidden bg-[#0a0a1f]"
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.6, ease: EASE }}
+          >
+            <div className="absolute inset-0"><Hyperspeed /></div>
+            <div className="absolute inset-0 bg-[#0a0a1f]/45" />
+            <div className="relative z-10 flex h-full flex-col items-center justify-center px-8 text-center">
+              <span className="font-display text-[11px] font-semibold uppercase tracking-[0.42em] text-white/55">My Journey</span>
+              <div className="mt-5 font-display text-6xl font-extrabold tabular-nums text-white drop-shadow-[0_2px_16px_rgba(0,0,0,0.7)] sm:text-7xl">
+                {Math.round(Math.min(100, Math.max(progress, cityReady ? 92 : 0)))}
+                <span className="align-top text-2xl text-white/40">%</span>
+              </div>
+              <div className="mt-6 h-[3px] w-[min(72vw,380px)] overflow-hidden rounded-full bg-white/15">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-amber-300 via-pink-400 to-violet-400 transition-[width] duration-300"
+                  style={{
+                    width: `${Math.max(6, Math.min(100, Math.max(progress, cityReady ? 92 : 0)))}%`,
+                    boxShadow: '0 0 16px 3px rgba(255,180,120,0.45)',
+                  }}
+                />
+              </div>
+              <p className="mt-5 font-sans text-sm font-light text-white/75 drop-shadow-[0_2px_10px_rgba(0,0,0,0.6)]">
+                {loadingMessage(item, progress, cityReady)}
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Return-to-home warp transition ── */}
+      <AnimatePresence>
+        {leaving && (
+          <motion.div
+            className="absolute inset-0 z-[210] overflow-hidden bg-[#0a0a1f]"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4, ease: EASE }}
+          >
+            <div className="absolute inset-0"><Hyperspeed /></div>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="font-display text-[11px] font-semibold uppercase tracking-[0.42em] text-white/65 drop-shadow-[0_2px_10px_rgba(0,0,0,0.6)]">
+                Returning home
+              </span>
+              <div className="mt-4 h-[3px] w-[min(60vw,260px)] overflow-hidden rounded-full bg-white/15">
+                <motion.div
+                  className="h-full rounded-full bg-gradient-to-r from-amber-300 to-violet-400"
+                  initial={{ width: '0%' }}
+                  animate={{ width: '100%' }}
+                  transition={{ duration: 1.4, ease: EASE }}
+                />
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -10,7 +10,7 @@ const MODEL_URL = '/models/delorean.glb';
 const { clamp, lerp, DEG2RAD } = THREE.MathUtils;
 
 function DeLorean() {
-  const { scene } = useGLTF(MODEL_URL, true);
+  const { scene } = useGLTF(MODEL_URL, '/draco/');
   const cloned = useMemo(() => scene.clone(true), [scene]);
   const { inv, offset } = useMemo(() => {
     const box = new THREE.Box3().setFromObject(cloned);
@@ -24,7 +24,7 @@ function DeLorean() {
   }, [cloned]);
   return <primitive object={cloned} scale={inv} position={offset} />;
 }
-useGLTF.preload(MODEL_URL, true);
+useGLTF.preload(MODEL_URL, '/draco/');
 
 function CarFallback() {
   return (
@@ -35,7 +35,7 @@ function CarFallback() {
   );
 }
 
-export default function JourneyScene({ controls, tuning, blurRef, startedRef, onProgress, onMilestone }) {
+export default function JourneyScene({ controls, tuning, blurRef, startedRef, onProgress, onMilestone, onCityReady }) {
   const carRef = useRef();
   const sim = useRef({ dist: 0, offset: 0, speed: 0, holdY: 0, vel: 0, nudge: 0 });
   const speedRef = useRef(0);
@@ -99,7 +99,7 @@ export default function JourneyScene({ controls, tuning, blurRef, startedRef, on
     state.camera.position.lerp(new THREE.Vector3(t.camera.x, t.camera.y + s.holdY * 0.1, t.camera.z), 0.06);
     state.camera.lookAt(t.car.x, t.camera.lookY + s.holdY * 0.2, t.camera.lookZ);
 
-    if (onProgress) onProgress(Math.min(s.offset / JOURNEY_LENGTH, 1), s.offset);
+    if (onProgress) onProgress(Math.min(s.offset / JOURNEY_LENGTH, 1), s.offset, speedRef.current);
 
     let idx = -1;
     for (let i = 0; i < MILESTONES.length; i += 1) {
@@ -129,7 +129,7 @@ export default function JourneyScene({ controls, tuning, blurRef, startedRef, on
 
       <Suspense fallback={null}>
         <MountainsBackdrop tuning={tuning} />
-        <City sim={sim} tuning={tuning} />
+        <City sim={sim} tuning={tuning} onReady={onCityReady} />
         <Prop tuning={tuning} />
         <Clouds tuning={tuning} />
         <Birds />

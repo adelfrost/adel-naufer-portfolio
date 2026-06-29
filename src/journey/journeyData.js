@@ -63,25 +63,25 @@ export const MILESTONES = [
   // ── Chapter 3 — Luxury & Now ───────────────────────────────────────────
   {
     at: 308, chapter: 'now', kind: 'job',
-    title: 'Graphic Artist · IHG Band 6', org: 'InterContinental Doha Beach & Spa', dates: '2020 – 2024',
+    title: 'Graphic Artist', org: 'InterContinental Doha Beach & Spa', dates: '2020 – 2024',
     stat: 'FIFA World Cup 2022', desc: 'Creative lead across 10+ restaurant brands; built Novecento & La Mar Beach; ran the entire WC 2022 campaign across 8 venues in-house.',
     brands: ['intercontinental', 'fifa', 'manko', 'doha-golf-club'],
   },
   {
     at: 344, chapter: 'now', kind: 'job',
-    title: 'Cluster Designer · Marriott', org: 'Le Royal Méridien Place Vendôme · Lusail', dates: '2025',
-    stat: 'QAR 15–30k/launch saved', desc: 'Brand guidelines for Agora Doha; full environmental branding & launch films for La Vallée Spa — in-house.',
+    title: 'Cluster Graphic Designer', org: 'Le Royal Méridien Place Vendôme · Lusail', dates: '2025',
+    stat: 'Agora Doha & La Vallée', desc: 'Brand guidelines for Agora Doha; full environmental branding and launch films for La Vallée Spa, all in-house.',
     brands: ['le-royal-meridien', 'agora-doha'],
   },
   {
     at: 384, chapter: 'now', kind: 'job',
-    title: 'Asst. Creative Director', org: 'Falcon Gold Precious Metals · Doha', dates: '2025 – Present',
-    stat: 'QAR 60–80k saved', desc: 'Built the brand from scratch, VVIP coin/bullion packaging, the web UI, a 360° virtual tour and a custom HRM — all in-house.',
+    title: 'Graphic Designer', org: 'Falcon Gold Precious Metals · Doha', dates: '2025 – Present',
+    stat: 'QAR 60–80k saved', desc: 'Built the brand from scratch, VVIP coin/bullion packaging, the web UI, a 360° virtual tour and a custom HRM, all in-house.',
     brands: [],
   },
   {
     at: 414, chapter: 'now', kind: 'finale',
     title: "Still leveling up", org: 'BSc Network & Software Eng · Cardiff Met', dates: '2024 – Present',
-    stat: 'The road goes on', desc: 'Designer who codes — and writes (Shatterlands), builds (Zavi Nexus), and ships. Let’s talk.',
+    stat: 'The road goes on', desc: 'Designer who codes, writes (Shatterlands), builds (Zavi Nexus), and ships. Let’s talk.',
   },
 ];
