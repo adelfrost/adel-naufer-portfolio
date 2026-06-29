@@ -29,6 +29,7 @@ export class JourneyAudio {
     this.radioIndex = 0;
     this._speed = 0;
     this._rain = 0;
+    this._disposed = false;
     this.mix = { ...DEFAULT_MIX, ...(initialMix || {}) };
     this.onChange = null;
     this.blobUrls = {};
@@ -44,6 +45,21 @@ export class JourneyAudio {
     a.loop = true;
     a.preload = 'auto';
     a.volume = 0;
+    // Backup loop: some Chromium builds drop the loop attribute on blob URLs,
+    // so restart manually if a clip ever ends.
+    a.addEventListener('ended', () => {
+      if (this._disposed) return;
+      try { a.currentTime = 0; a.play().catch(() => {}); } catch (_) {}
+    });
+    // If a blob ever fails to decode (browser quirk), fall back to streaming the
+    // real file url so the sound still plays.
+    a.addEventListener('error', () => {
+      if (this._disposed || !a._net || a._fellBack || a.src === a._net) return;
+      a._fellBack = true;
+      a.src = a._net;
+      try { a.load(); } catch (_) {}
+      if (this.started) a.play().catch(() => {});
+    });
     return a;
   }
 
@@ -67,7 +83,7 @@ export class JourneyAudio {
         const total = Number(res.headers.get('content-length')) || 0;
         if (!res.body || !total) {
           const blob = await res.blob();
-          this.blobUrls[key] = URL.createObjectURL(blob);
+          this.blobUrls[key] = URL.createObjectURL(new Blob([blob], { type: 'audio/mpeg' }));
           frac[i] = 1; report(); return;
         }
         const reader = res.body.getReader();
@@ -81,22 +97,27 @@ export class JourneyAudio {
           frac[i] = Math.min(loaded / total, 1);
           report();
         }
-        this.blobUrls[key] = URL.createObjectURL(new Blob(chunks));
+        this.blobUrls[key] = URL.createObjectURL(new Blob(chunks, { type: 'audio/mpeg' }));
         frac[i] = 1; report();
       } catch (_) {
         frac[i] = 1; report(); // never block the journey on one failed file
       }
     }));
 
-    // play everything from the in-memory blobs (fall back to network url)
-    this.car.src = this.blobUrls.car || AMBIENT.car;
-    this.city.src = this.blobUrls.city || AMBIENT.city;
-    this.rain.src = this.blobUrls.rain || AMBIENT.rain;
-    this.radio.src = this._radioSrc(this.radioIndex);
+    // play everything from the in-memory blobs (fall back to the network url)
+    this._wire(this.car, this.blobUrls.car, AMBIENT.car);
+    this._wire(this.city, this.blobUrls.city, AMBIENT.city);
+    this._wire(this.rain, this.blobUrls.rain, AMBIENT.rain);
+    this._wire(this.radio, this.blobUrls[`radio${this.radioIndex}`], RADIO_TRACKS[this.radioIndex].src);
     [this.car, this.city, this.rain, this.radio].forEach((a) => { try { a.load(); } catch (_) {} });
   }
 
-  _radioSrc(i) { return this.blobUrls[`radio${i}`] || RADIO_TRACKS[i].src; }
+  // set the playback src + remember the network url for the error fallback
+  _wire(el, blobUrl, net) {
+    el._net = net;
+    el._fellBack = false;
+    el.src = blobUrl || net;
+  }
 
   start() {
     if (this.started) return;
@@ -129,7 +150,7 @@ export class JourneyAudio {
 
   nextRadio(dir = 1) {
     this.radioIndex = (this.radioIndex + dir + RADIO_TRACKS.length) % RADIO_TRACKS.length;
-    this.radio.src = this._radioSrc(this.radioIndex);
+    this._wire(this.radio, this.blobUrls[`radio${this.radioIndex}`], RADIO_TRACKS[this.radioIndex].src);
     this.radio.loop = true;
     try { this.radio.load(); } catch (_) {}
     if (this.started) this.radio.play().catch(() => {});
@@ -154,6 +175,7 @@ export class JourneyAudio {
   }
 
   dispose() {
+    this._disposed = true;
     [this.car, this.city, this.rain, this.radio].forEach((a) => {
       try { a.pause(); a.removeAttribute('src'); a.load(); } catch (_) {}
     });
